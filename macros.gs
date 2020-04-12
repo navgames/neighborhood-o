@@ -135,47 +135,35 @@ function createMultipleChoiceQuizForms() {
   // Determine the column indices
   const colnames = ["Map", "Course", "Order", "Points", "Course", "Question", 
                     "Correct", "Incorrect1", "Incorrect2", "Incorrect3", "StartName", 
-                    "ShortName",
+                    "ShortName", "Title", 
                     "Neighborhood"];
   const headeri = colIndices(colnames, header);
   Logger.log('Column indices are ' + headeri);
   
-  // Read the data
+  // Read the data and put into array indexed by course.
+  // Each array element is an array of control objects.
   for (var i = 0; i < input.length; i++) {
     var row = input[i];
-    var map = row[headeri.Map].trim();
-    var course = row[headeri.Course].trim();
-    var order = row[headeri.Order];
-    var points = row[headeri.Points];
-    var question = row[headeri.Question].trim();
-    var correct = row[headeri.Correct];
-    var incorrect1 = row[headeri.Incorrect1];
-    var incorrect2 = row[headeri.Incorrect2];
-    var incorrect3 = row[headeri.Incorrect3];
-    var startname = row[headeri.StartName];
     var shortname = row[headeri.ShortName];
-    var neighborhood = row[headeri.Neighborhood];
-    var mapcourse = map + ' - ' + course;
     
-//    if (!quizzes.hasOwnProperty(course)) {
     if (!quizzes[shortname]) {
       quizzes[shortname] = new Array()
     }
     
     quizzes[shortname].push({
-      course: course,
-      order: order,
-      points: points,
-      question: question,
-      correct: correct,
-      incorrect1: incorrect1,
-      incorrect2: incorrect2,
-      incorrect3: incorrect3,
-      map: map,
-      mapcourse: mapcourse,
-      shortname: shortname,
-      neighborhood: neighborhood,
-      startname: startname
+      course: row[headeri.Course].trim(),
+      order: row[headeri.Order],
+      points: row[headeri.Points],
+      question: row[headeri.Question].trim(),
+      correct: row[headeri.Correct],
+      incorrect1: row[headeri.Incorrect1],
+      incorrect2: row[headeri.Incorrect2],
+      incorrect3: row[headeri.Incorrect3],
+      map: row[headeri.Map].trim(),
+      shortname: row[headeri.ShortName],
+      neighborhood: row[headeri.Neighborhood],
+      startname: row[headeri.StartName],
+      title: row[headeri.Title]
     });
   }
   
@@ -187,13 +175,13 @@ function createMultipleChoiceQuizForms() {
     Logger.log(quizName);
     var quiz = quizzes[quizName]; // This returns an array of controls for that course
     var coursename = quiz[0].shortname;
-    Logger.log('Name of form is ' + shortname);
+    Logger.log('Name of form is ' + coursename);
 
-    // Create a copy of the form template
+    // Create a copy of the form template and set up the form
     var file = formTemplate.makeCopy();
-    file.setName(formname);
+    file.setName(coursename);
     var form = FormApp.openById(file.getId());
-    form.setTitle(formname)
+    form.setTitle(quiz[0].title)
         .setDescription('A neighborhood map activity from Navigation Games');
     form.addTextItem()  
       .setTitle("Runner or Team Name")  
@@ -201,17 +189,16 @@ function createMultipleChoiceQuizForms() {
     
     // Create a copy of the doc template
     var file = docTemplate.makeCopy();
-    file.setName(formname);
+    file.setName(coursename);
     var doc = DocumentApp.openById(file.getId());
     var body = doc.getBody();
-
-    body.appendParagraph('Course: ' + formname);
-    body.appendParagraph('Start:  ' + startloc);
+    body.appendParagraph('Neighborhood: ' + quiz[0].neighborhood);
+    body.appendParagraph('Course: ' + quiz[0].course);
+    body.appendParagraph('Start:  ' + quiz[0].startname);
     body.appendParagraph('');
-
     
     // Create the multiple choice questions
-    Logger.log('quiz is ' + quiz);
+    Logger.log('quiz (course) is ' + quizName);
     for (var i=0; i<quiz.length; i++) {
       qdata = quiz[i];
       Logger.log("QUIZ QUESTION");
@@ -227,30 +214,37 @@ function createMultipleChoiceQuizForms() {
       // construct the choices with createChoice(value, isCorrect)
       // Could also have done (x, index) => createChoice(allanswers[x], index==0
       item = form.addMultipleChoiceItem();
-      var choices = [];
+      var choices = []; // for form
+      var questionnumber = 'Control ' + qdata.order; // for doc answer sheet    
+      body.appendParagraph(questionnumber + '. ' + qdata.question);
+      
       for (j =0; j < 4; j++) {
+        // form
         var choice = item.createChoice(allanswers[myorder[j]], myorder[j] == 0);
         choices.push(choice);
-      }
-      Logger.log(myorder);
-      Logger.log(allanswers);
-      Logger.log(choices);
-    
-      // create the question
+        // doc
+        var answer = allanswers[myorder[j]];
+        body.appendListItem(answer);
+      }  
+      
+      body.appendParagraph(''); // doc    
+      // create the form question
       item.setTitle(questionnumber)  
           .setChoices(choices)  
           .setPoints(pointvalue)
           .setHelpText(question)
           .setRequired(true);
-    }
- 
-    // multi-line "text area"  
+   
+    } // end of going through the controls for this course
+    
+    // FINISH UP THE FORM 
+    // multi-line "text area" 
     item = "Comments";  
     form.addParagraphTextItem()  
         .setTitle(item)  
         .setRequired(false);  
-  } // end of creating this form
-   
+  } // end of creating this course's form and doc
+  return(true);  
 }
 
 /**
