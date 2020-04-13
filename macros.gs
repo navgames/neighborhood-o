@@ -172,7 +172,7 @@ function addQuestionToFormAndDoc(qdata, form, body) {
   item = form.addMultipleChoiceItem();
   var choices = []; // for form
   var questionnumber = 'Control ' + qdata.order; // for doc answer sheet    
-  body.appendParagraph(questionnumber + '. ' + qdata.question);
+  body.appendParagraph(questionnumber + ' (' + qdata.feature + '). ' + qdata.question);
       
   for (j =0; j < 4; j++) {
      // form
@@ -222,7 +222,7 @@ function createMultipleChoiceQuizForms() {
   // Determine the column indices
   const colnames = ["Map", "Course", "Order", "Points", "Course", "Question", 
                     "Correct", "Incorrect1", "Incorrect2", "Incorrect3", "StartName", 
-                    "ShortName", "Title", 
+                    "ShortName", "Title", "StartAddress", "Feature",
                     "Neighborhood"];
   const headeri = colIndices(colnames, header);
   Logger.log('Column indices are ' + headeri);
@@ -250,7 +250,9 @@ function createMultipleChoiceQuizForms() {
       shortname: row[headeri.ShortName],
       neighborhood: row[headeri.Neighborhood],
       startname: row[headeri.StartName],
-      title: row[headeri.Title]
+      startaddress: row[headeri.StartAddress],
+      title: row[headeri.Title],
+      feature: row[headeri.Feature]
     });
   }
   
@@ -290,8 +292,6 @@ function createMultipleChoiceQuizForms() {
     Logger.log('quiz (course) is ' + quizName);
     for (var i=0; i<quiz.length; i++) {
       qdata = quiz[i];
-      Logger.log("QUIZ QUESTION");
-      Logger.log(qdata);
       totalPoints = totalPoints + qdata.points;
       addQuestionToFormAndDoc(qdata, form, body); // separate function written in this file
     
@@ -312,22 +312,23 @@ function createMultipleChoiceQuizForms() {
     
     // Set up courses
     courses.push({
-       ShortName: quizName, // short name
-       TotalPoints: totalPoints,
-       Neighborhood: quiz[0].neighborhood,
-       Course: quiz[0].course,
-       Map: quiz[0].map,
-       Title: quiz[0].title,
-       Start: quiz[0].startname,
-       NQuestions: quiz.length,
-       FormID: form.getId(),
-       FormEditURL: form.getEditUrl(),
-       FormResponseURL: form.getPublishedUrl(),
-       FormShortResponseURL: form.shortenFormUrl(form.getPublishedUrl()),
-       AnswerSheetID: doc.getId(),
-       AnswerSheetUrl: doc.getUrl(),
-       AnswerSheetPDFID: newFile.getId(),
-       AnswerSheetPDFUrl: newFile.getUrl()
+      ShortName: quizName, // short name
+      TotalPoints: totalPoints,
+      Neighborhood: quiz[0].neighborhood,
+      Course: quiz[0].course,
+      Map: quiz[0].map,
+      Title: quiz[0].title,
+      Start: quiz[0].startname,
+      StartAddress: quiz[0].startaddress,
+      NQuestions: quiz.length,
+      FormID: form.getId(),
+      FormEditURL: form.getEditUrl(),
+      FormResponseURL: form.getPublishedUrl(),
+      FormShortResponseURL: form.shortenFormUrl(form.getPublishedUrl()),
+      AnswerSheetID: doc.getId(),
+      AnswerSheetUrl: doc.getUrl(),
+      AnswerSheetPDFID: newFile.getId(),
+      AnswerSheetPDFUrl: newFile.getUrl()
     })
   } // end of creating this course's form and doc
   // Update the courses sheet!
@@ -345,4 +346,63 @@ function createMultipleChoiceQuizForms() {
  * @customfunction
  */
 function calculateResults() {
+  // Get the sheet named "CuratedCourses"
+  ss = SpreadsheetApp.getActiveSpreadsheet();
+  courseSheet = ss.getSheetByName("CuratedCourses");
+  resultSheet = ss.getSheetByName("Results");
+  if (resultSheet === null) {
+    resultSheet = ss.insertSheet("Results");
+  } else {
+    resultSheet.clear(); // clear all content from results
+  }
+  
+  input = courseSheet.getDataRange().getValues();
+  header = input.shift();
+  Logger.log('header: ' + header);
+  
+  var results = []; // This will be an array of objects; each object represents one result.
+  
+  // ShortName	TotalPoints	Neighborhood	Course	Map	Title	Start	NQuestions	FormID	FormEditURL	FormResponseURL	FormShortResponseURL	AnswerSheetID	AnswerSheetUrl	AnswerSheetPDFID	AnswerSheetPDFUrl
+  
+  // Determine the column indices that I care about
+  const colnames = ["Neighborhood", "TotalPoints", "ShortName", "Title", "Map", "Course", "NQuestions", "FormID", "Start",
+                   "AnswerSheetUrl", "AnswerSheetPDFUrl", "FormShortResponseURL"] // use FormID to get the responses.
+  const headeri = colIndices(colnames, header);
+  Logger.log('calculateResults: Column index for FormID is ' + headeri.FormID + ' and the first ID is ' + input[0][headeri.FormID]); 
+  Logger.log('input length is ' + input.length);
+  //CODE HERE: Get the score for each person! Put into the results array and then write it out.
+  for (var i=0; i<input.length; i++) {
+    data = input[i];
+    Logger.log('data length is ' + data.length);
+    // Get the responses
+    var form = FormApp.openById(data[headeri.FormID]);
+    var formResponses = form.getResponses();
+    Logger.log("Form Responses " + i + ": " + formResponses); 
+    for (r=0; r<formResponses.length; r++) {
+      Logger.log('TotalPoints is ' + data[headeri.TotalPoints]);
+      response = formResponses[r];
+      itemResponses = response.getGradableItemResponses();
+      score = 0;
+      for (j=0; j<itemResponses.length; j++) {
+        score += itemResponses[j].getScore();
+      } // j loop
+      results.push({
+        Score: score,
+        TotalPoints: data[headeri.TotalPoints],
+        NQuestions: data[headeri.NQuestions],
+        FractionRight: (Math.round(100* parseFloat(score) / parseFloat(data[headeri.TotalPoints])) / 100).toString(),
+        Timestamp: response.getTimestamp(),
+        Email: response.getRespondentEmail(),
+        Neighborhood: data[headeri.Neighborhood],
+        Course: data[headeri.Course],
+        Title: data[headeri.Title],
+        ShortName: data[headeri.ShortName],
+        Start: data[headeri.Start],
+        FormURL: data[headeri.FormShortResponseURL],
+        AnswerPDF: data[headeri.AnswerSheetPDFUrl],
+        AnswerSheet: data[headeri.AnswerSheetUrl]
+      })
+    } // r loop - all runneres
+  } // i loop - all courses
+  writeCourseDataToSheet(resultSheet, results);
 }
